@@ -62,6 +62,7 @@
     <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
     <uses-permission android:name="android.permission.READ_DEVICE_CONFIG" />
+    <uses-permission android:name="android.permission.WRITE_DEVICE_CONFIG" />
     <uses-permission android:name="android.permission.STATUS_BAR" />
     <uses-permission android:name="android.permission.MANAGE_USB" />
     <uses-permission android:name="android.permission.MANAGE_DEBUGGING" />
@@ -4245,6 +4246,10 @@
                 </intent-filter>
                 <intent-filter>
                     <action android:name="android.settings.panel.action.MOBILE_DATA" />
+                    <category android:name="android.intent.category.DEFAULT" />
+                </intent-filter>
+                <intent-filter>
+                    <action android:name="android.settings.panel.action.APP_VOLUME" />
                     <category android:name="android.intent.category.DEFAULT" />
                 </intent-filter>
         </activity>

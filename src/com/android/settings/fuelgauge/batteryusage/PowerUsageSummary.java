@@ -18,13 +18,16 @@ package com.android.settings.fuelgauge.batteryusage;
 
 import static com.android.settings.fuelgauge.BatteryBroadcastReceiver.BatteryUpdateType;
 
+import android.annotation.Nullable;
 import android.app.settings.SettingsEnums;
 import android.content.Context;
+import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Settings.Global;
+import android.util.Log;
 
 import androidx.annotation.VisibleForTesting;
 import androidx.loader.app.LoaderManager;
@@ -47,6 +50,12 @@ import com.android.settings.search.BaseSearchIndexProvider;
 import com.android.settingslib.search.SearchIndexable;
 import com.android.settingslib.widget.LayoutPreference;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.lang.Integer;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -64,6 +73,16 @@ public class PowerUsageSummary extends PowerUsageBase implements
     @VisibleForTesting
     static final String KEY_BATTERY_USAGE = "battery_usage_summary";
 
+    private static final String KEY_CURRENT_BATTERY_CAPACITY = "current_battery_capacity";
+    private static final String KEY_DESIGNED_BATTERY_CAPACITY = "designed_battery_capacity";
+    private static final String KEY_BATTERY_CHARGE_CYCLES = "battery_charge_cycles";
+    private static final String KEY_BATTERY_TEMP = "battery_temp";
+    private static final String SMART_CHARGING = "smart_charging_key";
+
+    private String mBatDesCap;
+    private String mBatCurCap;
+    private String mBatChgCyc;
+
     @VisibleForTesting
     PowerUsageFeatureProvider mPowerFeatureProvider;
     @VisibleForTesting
@@ -72,6 +91,14 @@ public class PowerUsageSummary extends PowerUsageBase implements
     LayoutPreference mBatteryLayoutPref;
     @VisibleForTesting
     BatteryInfo mBatteryInfo;
+    @VisibleForTesting
+    PowerGaugePreference mCurrentBatteryCapacity;
+    @VisibleForTesting
+    PowerGaugePreference mDesignedBatteryCapacity;
+    @VisibleForTesting
+    PowerGaugePreference mBatteryChargeCycles;
+    @VisibleForTesting
+    PowerGaugePreference mBatteryTempPref;
 
     @VisibleForTesting
     BatteryHeaderPreferenceController mBatteryHeaderPreferenceController;
@@ -161,7 +188,29 @@ public class PowerUsageSummary extends PowerUsageBase implements
         initFeatureProvider();
         initPreference();
 
+        mCurrentBatteryCapacity = (PowerGaugePreference) findPreference(
+                KEY_CURRENT_BATTERY_CAPACITY);
+        mDesignedBatteryCapacity = (PowerGaugePreference) findPreference(
+                KEY_DESIGNED_BATTERY_CAPACITY);
+        mBatteryChargeCycles = (PowerGaugePreference) findPreference(
+                KEY_BATTERY_CHARGE_CYCLES);
         mBatteryUtils = BatteryUtils.getInstance(getContext());
+
+        // Check availability of Battery Health
+        Preference mDesignedHealthPref = (Preference) findPreference(KEY_DESIGNED_BATTERY_CAPACITY);
+        if (!getResources().getBoolean(R.bool.config_supportBatteryHealth)) {
+            getPreferenceScreen().removePreference(mDesignedHealthPref);
+        }
+
+        Preference mCurrentHealthPref = (Preference) findPreference(KEY_CURRENT_BATTERY_CAPACITY);
+        if (!getResources().getBoolean(R.bool.config_supportBatteryHealth)) {
+            getPreferenceScreen().removePreference(mCurrentHealthPref);
+        }
+
+        Preference mCyclesHealthPref = (Preference) findPreference(KEY_BATTERY_CHARGE_CYCLES);
+        if (!getResources().getBoolean(R.bool.config_supportBatteryHealth)) {
+            getPreferenceScreen().removePreference(mCyclesHealthPref);
+        }
 
         if (Utils.isBatteryPresent(getContext())) {
             restartBatteryInfoLoader();
@@ -171,6 +220,12 @@ public class PowerUsageSummary extends PowerUsageBase implements
         }
         mBatteryTipPreferenceController.restoreInstanceState(icicle);
         updateBatteryTipFlag(icicle);
+
+        // Check availability of Smart Charging
+        Preference mSmartCharging = (Preference) findPreference(SMART_CHARGING);
+        if (!getResources().getBoolean(com.android.internal.R.bool.config_smartChargingAvailable)) {
+            getPreferenceScreen().removePreference(mSmartCharging);
+        }
     }
 
     @Override
@@ -232,6 +287,20 @@ public class PowerUsageSummary extends PowerUsageBase implements
         }
         // reload BatteryInfo and updateUI
         restartBatteryInfoLoader();
+
+        mBatDesCap = getResources().getString(R.string.config_batDesCap);
+        mBatCurCap = getResources().getString(R.string.config_batCurCap);
+        mBatChgCyc = getResources().getString(R.string.config_batChargeCycle);
+
+        mCurrentBatteryCapacity.setSubtitle(parseBatterymAhText(mBatCurCap));
+        mDesignedBatteryCapacity.setSubtitle(parseBatterymAhText(mBatDesCap));
+        mBatteryChargeCycles.setSubtitle(parseBatteryCycle(mBatChgCyc));
+
+        if (BatteryInfo.batteryTemp != 0f) {
+            mBatteryTempPref.setSubtitle(BatteryInfo.batteryTemp + " \u2103");
+        } else {
+            mBatteryTempPref.setSubtitle(getResources().getString(R.string.status_unavailable));
+        }
     }
 
     @VisibleForTesting
@@ -256,6 +325,7 @@ public class PowerUsageSummary extends PowerUsageBase implements
         mBatteryUsagePreference = findPreference(KEY_BATTERY_USAGE);
         mBatteryUsagePreference.setSummary(getString(R.string.advanced_battery_preference_summary));
 
+        mBatteryTempPref = (PowerGaugePreference) findPreference(KEY_BATTERY_TEMP);
         mHelpPreference = findPreference(KEY_BATTERY_ERROR);
         mHelpPreference.setVisible(false);
     }
@@ -297,6 +367,62 @@ public class PowerUsageSummary extends PowerUsageBase implements
         restartBatteryTipLoader();
     }
 
+    private String parseBatterymAhText(String file) {
+        try {
+            return Integer.parseInt(readLine(file)) / 1000 + " mAh";
+        } catch (IOException ioe) {
+            Log.e(TAG, "Cannot read battery capacity from "
+                    + file, ioe);
+        } catch (NumberFormatException nfe) {
+            Log.e(TAG, "Read a badly formatted battery capacity from "
+                    + file, nfe);
+        }
+        return getResources().getString(R.string.status_unavailable);
+    }
+
+    private String parseBatteryCycle(String file) {
+        try {
+            return Integer.parseInt(readLine(file)) + " Cycles";
+        } catch (IOException ioe) {
+            Log.e(TAG, "Cannot read battery cycle from "
+                    + file, ioe);
+        } catch (NumberFormatException nfe) {
+            Log.e(TAG, "Read a badly formatted battery cycle from "
+                    + file, nfe);
+        }
+        return getResources().getString(R.string.status_unavailable);
+    }
+
+    /**
+    * Reads a line from the specified file.
+    *
+    * @param filename The file to read from.
+    * @return The first line up to 256 characters, or <code>null</code> if file is empty.
+    * @throws IOException If the file couldn't be read.
+    */
+    @Nullable
+    private String readLine(String filename) throws IOException {
+        final BufferedReader reader = new BufferedReader(new FileReader(filename), 256);
+        try {
+            return reader.readLine();
+        } finally {
+            reader.close();
+        }
+    }
+
     public static final BaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
-            new BaseSearchIndexProvider(R.xml.power_usage_summary);
+            new BaseSearchIndexProvider(R.xml.power_usage_summary) {
+                @Override
+                public List<String> getNonIndexableKeys(Context context) {
+                    List<String> keys = super.getNonIndexableKeys(context);
+                    final Resources res = context.getResources();
+
+                    boolean mSmartChargingSupported = res.getBoolean(
+                            com.android.internal.R.bool.config_smartChargingAvailable);
+                    if (!mSmartChargingSupported)
+                        keys.add(SMART_CHARGING);
+
+                    return keys;
+                }
+            };
 }
