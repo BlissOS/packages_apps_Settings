@@ -97,6 +97,15 @@
             android:entryValues="@array/hardware_keys_action_values"
             android:persistent="false" />
 
+        <Preference
+            android:key="navbar_tuner"
+            android:title="@string/navbar_tuner_title"
+            android:summary="@string/navbar_tuner_summary" >
+            <intent android:action="com.android.settings.action.NAV_BAR_TUNER"
+                android:targetPackage="com.android.systemui"
+                android:targetClass="com.android.systemui.tuner.NavbarActivity" />
+        </Preference>
+
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -340,15 +349,6 @@
             android:title="@string/click_partial_screenshot_title"
             android:summary="@string/click_partial_screenshot_summary"
             android:defaultValue="false" />
-
-        <Preference
-            android:key="navbar_tuner"
-            android:title="@string/navbar_tuner_title"
-            android:summary="@string/navbar_tuner_summary" >
-            <intent android:action="com.android.settings.action.NAV_BAR_TUNER"
-                android:targetPackage="com.android.systemui"
-                android:targetClass="com.android.systemui.tuner.NavbarActivity" />
-        </Preference>
 
     </PreferenceCategory>
 
