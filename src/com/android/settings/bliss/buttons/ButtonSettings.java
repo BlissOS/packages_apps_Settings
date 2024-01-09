@@ -944,7 +944,7 @@ public class ButtonSettings extends SettingsPreferenceFragment
 
     @Override
     public int getMetricsCategory() {
-        return MetricsEvent.LMODROID;
+        return MetricsEvent.BLISSIFY;
     }
 
     @Override

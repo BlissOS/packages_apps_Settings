@@ -17,7 +17,7 @@
 package com.android.settings.bliss.touch;
 
 import android.content.Context;
-import com.android.internal.lineage.hardware.LineageHardwareManager;
+import com.android.internal.bliss.hardware.LineageHardwareManager;
 import com.android.settings.core.BasePreferenceController;
 
 public class HighTouchSensitivitySettingsPreferenceController extends BasePreferenceController {
