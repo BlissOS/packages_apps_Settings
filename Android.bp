@@ -69,7 +69,6 @@ android_library {
         "res-export", // for external usage
         "res-product",
         "Blissify/res",
-        "SettingsGoogle/res",
     ],
     static_libs: [
         // External dependencies
